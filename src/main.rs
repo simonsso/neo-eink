@@ -14,11 +14,8 @@ use embedded_graphics::coord::Coord;
 use embedded_graphics::fonts::Font6x8;
 use embedded_graphics::image::Image1BPP;
 use embedded_graphics::prelude::*;
-//use embedded_graphics::primitives::{Circle, Line};
 use embedded_graphics::Drawing;
 
-use core::option::*;
-use linux_embedded_hal::Delay;
 use linux_embedded_hal::Pin;
 use linux_embedded_hal::Spidev;
 use embedded_hal::digital::OutputPin;
@@ -26,9 +23,6 @@ use embedded_hal::digital::OutputPin;
 use sysfs_gpio::Direction;
 
 use linux_embedded_hal::spidev::{SpidevOptions, SpidevTransfer, SPI_MODE_0};
-// use std::io::Error;
-use std::io::prelude::*;
-// use linux_embedded_hal::spidev::*;
 
 pub enum Error {
     UnexpectedResponse,
@@ -36,13 +30,13 @@ pub enum Error {
 
 fn main() {
 
-    match Display() {
+    match display_payload() {
         Ok(_) =>  {println!("Operation ok")},
         Err(_) => {println!("Something failed");}
     }
 }
 
-fn  Display() -> Result<(),Error> {
+fn  display_payload() -> Result<(),Error> {
     // let mut delay = Delay::new(syst,clocks);
 
     let mut delay = linux_embedded_hal::Delay;
@@ -90,7 +84,7 @@ fn  Display() -> Result<(),Error> {
         dc:u64,
     }
 
-    const  NEOMAPPING: PinMappings =  PinMappings{cs:67, rst:1, busy:2, dc:0 };
+  // expected   const  NEOMAPPING: PinMappings =  PinMappings{cs:67, rst:1, busy:2, dc:0 };
     const  RPI3MAPPING: PinMappings = PinMappings{cs:8, rst:27, busy:24, dc:25 }; 
 
     let mapping=RPI3MAPPING;
@@ -99,27 +93,26 @@ fn  Display() -> Result<(),Error> {
     println!("Export Pins");
 
     let cs = Pin::new(mapping.cs);
-    cs.export();
-    cs.set_direction(Direction::Low);
+    cs.export().map_err(|_|{Error::UnexpectedResponse})?;
+    cs.set_direction(Direction::Low).map_err(|_|{Error::UnexpectedResponse})?;
     let mut rst = Pin::new(mapping.rst);
     match rst.export() {
         Ok(_) =>  {println!("Rst ok")},
         Err(x) => {println!("Rst Export Failed {}",x);}
     }
-    rst.set_direction(Direction::Low);
+    rst.set_direction(Direction::Low).map_err(|_|{Error::UnexpectedResponse})?;
     rst.set_low();
     rst.set_high();
-    let mut busy = Pin::new(mapping.busy);
+    let busy = Pin::new(mapping.busy);
     
     match busy.export() {
         Ok(_) =>  {println!("Busy ok")},
         Err(x) => {println!("Busy Export Failed {}",x);}
     }
-    busy.set_direction(Direction::Low);
-    let mut dc = Pin::new(mapping.dc);
-
-    dc.export();
-    dc.set_direction(Direction::Low);
+    busy.set_direction(Direction::Low).map_err(|_|{Error::UnexpectedResponse})?;
+    let dc = Pin::new(mapping.dc);
+    dc.export().map_err(|_|{Error::UnexpectedResponse})?;;
+    dc.set_direction(Direction::Low).map_err(|_|{Error::UnexpectedResponse})?;
 
     match EPD1in54::new(&mut spi, cs, busy, dc, rst, &mut delay) {
         Ok(x) => {
