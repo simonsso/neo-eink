@@ -5,11 +5,9 @@ extern crate input_stream;
 
 use epd_waveshare::{
     epd1in54::{Buffer1in54, EPD1in54},
-    graphics::{Display, DisplayRotation},
+    graphics::{Display},
     prelude::*,
 };
-use std::thread::sleep;
-use std::time::Duration;
 
 use std::io::BufRead;
 
@@ -17,7 +15,6 @@ use std::io::BufRead;
 extern crate embedded_graphics;
 use embedded_graphics::coord::Coord;
 use embedded_graphics::fonts::Font6x8;
-use embedded_graphics::image::Image1BPP;
 use embedded_graphics::prelude::*;
 use embedded_graphics::Drawing;
 
@@ -28,7 +25,7 @@ use input_stream::InputStream;
 
 use sysfs_gpio::Direction;
 
-use linux_embedded_hal::spidev::{SpidevOptions, SpidevTransfer, SPI_MODE_0};
+use linux_embedded_hal::spidev::{SpidevOptions, SPI_MODE_0};
 
 pub enum Error {
     UnexpectedResponse,
@@ -37,6 +34,7 @@ pub enum Error {
 pub enum PayloadData<'a>{
     Text(InputStream<std::io::StdinLock<'a>>),   // TODO this type should be something more generic when I understund it more
 //    Image(u32,u32,embedded_graphics::image::Image),
+    Internal
 }
 
 fn main() -> std::io::Result<()> {
@@ -176,56 +174,4 @@ fn  display_payload(payload:PayloadData) -> Result<(),Error> {
     
     Ok(())
     
-
-    /*
-        let mut x=0;
-        let mut y=0;
-                    display.draw(
-                    Font6x8::render_str("Hello, World!")
-                        .with_stroke(Some(Color::Black))
-                        .with_fill(Some(Color::White))
-                        .translate(Coord::new(x, y))
-                        .into_iter()
-                );
-
-
-                // Transfer the frame data to the epd
-                let _ans = epd.update_frame(&mut spi, &display.buffer());
-
-                // Display the frame on the epd
-                let _ans2 = epd.display_frame(&mut spi);
-                x += 0;
-                y += 9;
-            }else
-            {
-                led0.set_high();
-            }
-            if btn2.is_low(){
-                led1.set_low();
-                display.clear_buffer(Color::White);
-                display.draw(rust_img.translate(Coord::new(28,28)).into_iter());
-                            // Transfer the frame data to the epd
-                let _ans = epd.update_frame(&mut spi, &display.buffer());
-
-                // Display the frame on the epd
-                let _ans2 = epd.display_frame(&mut spi);
-            }else
-            {
-                led1.set_high();
-            }
-            if btn3.is_low(){
-                led2.set_low();
-                display.clear_buffer(Color::Black);
-                display.draw(abema_img.translate(Coord::new(24,24)).into_iter());
-                            // Transfer the frame data to the epd
-                let _ans = epd.update_frame(&mut spi, &display.buffer());
-
-                // Display the frame on the epd
-                let _ans2 = epd.display_frame(&mut spi);
-            }else
-            {
-                led2.set_high();
-            }
-        }
-    */
 }
