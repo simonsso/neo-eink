@@ -1,6 +1,8 @@
 // the eink library
 extern crate epd_waveshare;
 extern crate clap;
+extern crate input_stream;
+
 use epd_waveshare::{
     epd1in54::{Buffer1in54, EPD1in54},
     graphics::{Display, DisplayRotation},
@@ -8,6 +10,8 @@ use epd_waveshare::{
 };
 use std::thread::sleep;
 use std::time::Duration;
+
+use std::io::BufRead;
 
 // Graphics
 extern crate embedded_graphics;
@@ -20,6 +24,7 @@ use embedded_graphics::Drawing;
 use linux_embedded_hal::Pin;
 use linux_embedded_hal::Spidev;
 use embedded_hal::digital::OutputPin;
+use input_stream::InputStream;
 
 use sysfs_gpio::Direction;
 
@@ -29,21 +34,44 @@ pub enum Error {
     UnexpectedResponse,
 }
 
-fn main() {
+pub enum PayloadData<'a>{
+    Text(InputStream<std::io::StdinLock<'a>>),   // TODO this type should be something more generic when I understund it more
+//    Image(u32,u32,embedded_graphics::image::Image),
+}
+
+fn main() -> std::io::Result<()> {
 
     clap::App::new("neo_eink").version("0.1").about("Display items on waveshare connected on SPI").author("Fredrik SIMONSSON")
                 .arg(clap::Arg::with_name("v")
                                .short("v")
                                .multiple(true)
-                               .help("Sets the level of verbosity"))                          
+                               .help("Sets the level of verbosity"))
+                .arg(clap::Arg::with_name("hal-mode"))
+                    .help("choose hal mode (RPI or NEO)")                 
                 .get_matches();
-    match display_payload() {
+    let stdinlock = std::io::stdin();
+    let s:InputStream<std::io::StdinLock> = InputStream::new(stdinlock.lock());
+
+    let mypayload = PayloadData::Text(s );
+                // This code is going here soon somehow
+                // sleep(Duration::from_millis(5_000));
+                //     let rust_bytes = include_bytes!("../data/rust144x144.raw");
+                //     let abema_bytes = include_bytes!("../data/abema151x151.raw");
+
+                //     let rust_img: Image1BPP<epd_waveshare::color::Color> =
+                //         embedded_graphics::image::Image::new(rust_bytes, 144, 144);
+                //     let abema_img: Image1BPP<epd_waveshare::color::Color> =             embedded_graphics::image::Image::new(abema_bytes, 151, 151);
+
+
+
+    match display_payload(mypayload) {
         Ok(_) =>  {println!("Operation ok")},
         Err(_) => {println!("Something failed");}
     }
+    Ok(())
 }
 
-fn  display_payload() -> Result<(),Error> {
+fn  display_payload(payload:PayloadData) -> Result<(),Error> {
     // let mut delay = Delay::new(syst,clocks);
 
     let mut delay = linux_embedded_hal::Delay;
@@ -125,32 +153,27 @@ fn  display_payload() -> Result<(),Error> {
     let mut display = Display::new(epd.width(), epd.height(), &mut buffer.buffer);
 
     display.clear_buffer(Color::White);
-
     // Draw some text
-    display.draw(
-        Font6x8::render_str("Hello Rust vesropm!")
-            .with_stroke(Some(Color::Black))
-            .with_fill(Some(Color::White))
-            .translate(Coord::new(5, 5))
-            .into_iter(),
-    );
-    let _ans = epd.update_frame(&mut spi, &display.buffer());
-    let _ans2 = epd.display_frame(&mut spi);
-
-    sleep(Duration::from_millis(5_000));
-    let rust_bytes = include_bytes!("../data/rust144x144.raw");
-    let abema_bytes = include_bytes!("../data/abema151x151.raw");
-
-    let rust_img: Image1BPP<epd_waveshare::color::Color> =
-        embedded_graphics::image::Image::new(rust_bytes, 144, 144);
-    let abema_img: Image1BPP<epd_waveshare::color::Color> =             embedded_graphics::image::Image::new(abema_bytes, 151, 151);
-    display.clear_buffer(Color::White);
-    display.draw(abema_img.translate(Coord::new(28,28)).into_iter());
-    // Transfer the frame data to the epd
-    let _ans = epd.update_frame(&mut spi, &display.buffer());
-
-    // Display the frame on the epd
-    let _ans2 = epd.display_frame(&mut spi);
+    match payload{
+        PayloadData::Text(stream) => {
+            stream.lines().enumerate().for_each(|(pos,message)|{
+                    let pos = pos as i32;
+                    if let Ok(message) = message {
+                        display.draw(
+                        Font6x8::render_str(&message)
+                            .with_stroke(Some(Color::Black))
+                            .with_fill(Some(Color::White))
+                            .translate(Coord::new(5, 5+pos*9))
+                            .into_iter(),
+                        );
+                    }
+            })
+        },
+        _=> { },
+    }
+    epd.update_frame(&mut spi, &display.buffer()).map_err(|_|{Error::UnexpectedResponse})?;
+    epd.display_frame(&mut spi).map_err(|_|{Error::UnexpectedResponse})?;
+    
     Ok(())
     
 

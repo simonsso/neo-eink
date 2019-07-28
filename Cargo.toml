@@ -12,6 +12,7 @@ epd-waveshare = { version = "0.2.0", default-features = false, features = ["epd1
 embedded-graphics = "0.4.3"
 sysfs_gpio = "0.5.3"
 clap = "2.33.0"
+input-stream = "0.3.0"
 
 [dependencies.embedded-hal]
 features = ["unproven"]
