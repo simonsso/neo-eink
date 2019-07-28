@@ -26,13 +26,25 @@ use embedded_hal::digital::OutputPin;
 use sysfs_gpio::Direction;
 
 use linux_embedded_hal::spidev::{SpidevOptions, SpidevTransfer, SPI_MODE_0};
-use std::io;
+// use std::io::Error;
 use std::io::prelude::*;
 // use linux_embedded_hal::spidev::*;
 
+pub enum Error {
+    UnexpectedResponse,
+}
 
 fn main() {
+
+    match Display() {
+        Ok(_) =>  {println!("Operation ok")},
+        Err(_) => {println!("Something failed");}
+    }
+}
+
+fn  Display() -> Result<(),Error> {
     // let mut delay = Delay::new(syst,clocks);
+
     let mut delay = linux_embedded_hal::Delay;
 
     let mut spi = Spidev::open("/dev/spidev0.0").unwrap();
@@ -47,16 +59,15 @@ fn main() {
     }
 
     // Pin Mappings for NEONano
-    // Pin     Connecton   Colour
-    // P0.27   busy        purple
-    // P0.26   Rst         white
-    // P0.02   DC          Green
+    // Pin     Connecton   Colour       LXnum
+    // P0.27   busy        purple       2
+    // P0.26   Rst         white        1
+    // P0.02   DC          Green        0
     // GND                 black
-    // P0.25   CS          orange
+    // P0.25   CS          orange       67
     // P0.24   clk         yellow
     // P0.23   Din (MOSI)  blue
-    // Setup the epd
-    //let cs = Pin::new(67);
+ 
 
     // Rpi bindings from https://www.waveshare.com/w/upload/a/a2/1.8inch_LCD_Module_User_Manual_EN.pdf
 
@@ -71,12 +82,26 @@ fn main() {
     //      BL              GPIO.5 (PIN18)      24
 
 
+
+    struct PinMappings{
+        cs:u64,
+        rst:u64,
+        busy:u64,
+        dc:u64,
+    }
+
+    const  NEOMAPPING: PinMappings =  PinMappings{cs:67, rst:1, busy:2, dc:0 };
+    const  RPI3MAPPING: PinMappings = PinMappings{cs:8, rst:27, busy:24, dc:25 }; 
+
+    let mapping=RPI3MAPPING;
+
+
     println!("Export Pins");
 
-    let cs = Pin::new(8);
+    let cs = Pin::new(mapping.cs);
     cs.export();
     cs.set_direction(Direction::Low);
-    let mut rst = Pin::new(27);
+    let mut rst = Pin::new(mapping.rst);
     match rst.export() {
         Ok(_) =>  {println!("Rst ok")},
         Err(x) => {println!("Rst Export Failed {}",x);}
@@ -84,14 +109,14 @@ fn main() {
     rst.set_direction(Direction::Low);
     rst.set_low();
     rst.set_high();
-    let mut busy = Pin::new(24);
+    let mut busy = Pin::new(mapping.busy);
     
     match busy.export() {
         Ok(_) =>  {println!("Busy ok")},
         Err(x) => {println!("Busy Export Failed {}",x);}
     }
     busy.set_direction(Direction::Low);
-    let mut dc = Pin::new(25);
+    let mut dc = Pin::new(mapping.dc);
 
     dc.export();
     dc.set_direction(Direction::Low);
@@ -131,6 +156,7 @@ fn main() {
             println!("Good bye");
         }
     };
+    Ok(())
 
     /*
         let mut x=0;
