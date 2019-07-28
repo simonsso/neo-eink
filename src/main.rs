@@ -1,5 +1,6 @@
 // the eink library
 extern crate epd_waveshare;
+extern crate clap;
 use epd_waveshare::{
     epd1in54::{Buffer1in54, EPD1in54},
     graphics::{Display, DisplayRotation},
@@ -30,6 +31,12 @@ pub enum Error {
 
 fn main() {
 
+    clap::App::new("neo_eink").version("0.1").about("Display items on waveshare connected on SPI").author("Fredrik SIMONSSON")
+                .arg(clap::Arg::with_name("v")
+                               .short("v")
+                               .multiple(true)
+                               .help("Sets the level of verbosity"))                          
+                .get_matches();
     match display_payload() {
         Ok(_) =>  {println!("Operation ok")},
         Err(_) => {println!("Something failed");}
@@ -75,8 +82,6 @@ fn  display_payload() -> Result<(),Error> {
     //      RST             GPIO.2(PIN13)       27
     //      BL              GPIO.5 (PIN18)      24
 
-
-
     struct PinMappings{
         cs:u64,
         rst:u64,
@@ -88,7 +93,6 @@ fn  display_payload() -> Result<(),Error> {
     const  RPI3MAPPING: PinMappings = PinMappings{cs:8, rst:27, busy:24, dc:25 }; 
 
     let mapping=RPI3MAPPING;
-
 
     println!("Export Pins");
 
@@ -114,42 +118,41 @@ fn  display_payload() -> Result<(),Error> {
     dc.export().map_err(|_|{Error::UnexpectedResponse})?;;
     dc.set_direction(Direction::Low).map_err(|_|{Error::UnexpectedResponse})?;
 
-    match EPD1in54::new(&mut spi, cs, busy, dc, rst, &mut delay) {
-        Ok(x) => {
-            println!("PD1in54::new: OK");
-            let mut epd = x;
-            // Setup the graphics
-            let mut buffer = Buffer1in54::default();
-            let mut display = Display::new(epd.width(), epd.height(), &mut buffer.buffer);
+    let mut epd = EPD1in54::new(&mut spi, cs, busy, dc, rst, &mut delay).map_err(|_|{Error::UnexpectedResponse})?;
+    println!("PD1in54::new: OK");
+    // Setup the graphics
+    let mut buffer = Buffer1in54::default();
+    let mut display = Display::new(epd.width(), epd.height(), &mut buffer.buffer);
 
-            // Draw some text
-            display.draw(
-                Font6x8::render_str("Hello Rust vesropm!")
-                    .with_stroke(Some(Color::Black))
-                    .with_fill(Some(Color::White))
-                    .translate(Coord::new(5, 5))
-                    .into_iter(),
-            );
-            sleep(Duration::from_millis(1_000));
-            let rust_bytes = include_bytes!("../data/rust144x144.raw");
-            let abema_bytes = include_bytes!("../data/abema151x151.raw");
+    display.clear_buffer(Color::White);
 
-            let rust_img: Image1BPP<epd_waveshare::color::Color> =
-                embedded_graphics::image::Image::new(rust_bytes, 144, 144);
-            let abema_img: Image1BPP<epd_waveshare::color::Color> =             embedded_graphics::image::Image::new(abema_bytes, 151, 151);
-            display.clear_buffer(Color::White);
-            display.draw(rust_img.translate(Coord::new(28,28)).into_iter());
-            // Transfer the frame data to the epd
-            let _ans = epd.update_frame(&mut spi, &display.buffer());
+    // Draw some text
+    display.draw(
+        Font6x8::render_str("Hello Rust vesropm!")
+            .with_stroke(Some(Color::Black))
+            .with_fill(Some(Color::White))
+            .translate(Coord::new(5, 5))
+            .into_iter(),
+    );
+    let _ans = epd.update_frame(&mut spi, &display.buffer());
+    let _ans2 = epd.display_frame(&mut spi);
 
-            // Display the frame on the epd
-            let _ans2 = epd.display_frame(&mut spi);
-        }
-        Err(_) => {
-            println!("Good bye");
-        }
-    };
+    sleep(Duration::from_millis(5_000));
+    let rust_bytes = include_bytes!("../data/rust144x144.raw");
+    let abema_bytes = include_bytes!("../data/abema151x151.raw");
+
+    let rust_img: Image1BPP<epd_waveshare::color::Color> =
+        embedded_graphics::image::Image::new(rust_bytes, 144, 144);
+    let abema_img: Image1BPP<epd_waveshare::color::Color> =             embedded_graphics::image::Image::new(abema_bytes, 151, 151);
+    display.clear_buffer(Color::White);
+    display.draw(abema_img.translate(Coord::new(28,28)).into_iter());
+    // Transfer the frame data to the epd
+    let _ans = epd.update_frame(&mut spi, &display.buffer());
+
+    // Display the frame on the epd
+    let _ans2 = epd.display_frame(&mut spi);
     Ok(())
+    
 
     /*
         let mut x=0;
