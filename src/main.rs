@@ -97,13 +97,11 @@ fn main() -> std::io::Result<()> {
     let abema_img: embedded_graphics::image::Image1BPP<epd_waveshare::color::Color> = embedded_graphics::image::Image::new(abema_bytes, 151, 151);
 
     let mypayload = match matches.value_of("image"){
-        Some("rust") => PayloadData::Image(10,10,rust_img),
-        Some("abema") => PayloadData::Image(10,10,abema_img),
+        Some("rust") => PayloadData::Image(28,28,rust_img),
+        Some("abema") => PayloadData::Image(24,24,abema_img),
         Some(_) => PayloadData::Internal,
         None =>    PayloadData::Text(s)
     };
-
-
 
 
     match display_payload(mypayload) {
@@ -166,8 +164,6 @@ fn display_payload(payload: PayloadData) -> Result<(), NeoError> {
     };
 
     let mapping = RPI3MAPPING;
-
-    println!("Export Pins");
 
     let cs = Pin::new(mapping.cs);
     cs.export()?;
