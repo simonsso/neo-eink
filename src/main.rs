@@ -55,12 +55,12 @@ where
 
 pub enum PayloadData<'a> {
     Text(InputStream<std::io::StdinLock<'a>>), // TODO this type should be something more generic when I understund it more
-    //    Image(u32,u32,embedded_graphics::image::Image),
+    Image(i32,i32,embedded_graphics::image::Image1BPP<'a,epd_waveshare::color::Color>),
     Internal,
 }
 
 fn main() -> std::io::Result<()> {
-    clap::App::new("neo_eink")
+    let matches = clap::App::new("neo_eink")
         .version("0.1")
         .about("Display items on waveshare connected on SPI")
         .author("Fredrik SIMONSSON")
@@ -70,21 +70,41 @@ fn main() -> std::io::Result<()> {
                 .multiple(true)
                 .help("Sets the level of verbosity"),
         )
-        .arg(clap::Arg::with_name("hal-mode"))
-        .help("choose hal mode (RPI or NEO)")
+        .arg(
+            clap::Arg::with_name("hal-mode")
+                .long("hal-mode")
+                .takes_value(true)
+                .help("choose hal mode (RPI or NEO)")
+        )
+        .arg(
+            clap::Arg::with_name("image")
+                .long("image")
+                .takes_value(true)
+                .help("image name, rust or ameba")
+        )
         .get_matches();
     let stdinlock = std::io::stdin();
     let s: InputStream<std::io::StdinLock> = InputStream::new(stdinlock.lock());
 
-    let mypayload = PayloadData::Text(s);
-    // This code is going here soon somehow
-    // sleep(Duration::from_millis(5_000));
-    //     let rust_bytes = include_bytes!("../data/rust144x144.raw");
-    //     let abema_bytes = include_bytes!("../data/abema151x151.raw");
+    match matches.value_of("hal-mode"){
+        Some("neo") => { println!("Neo mode not implemented yet")}
+        _ => {println!("default mode Rpi")}
+    };
 
-    //     let rust_img: Image1BPP<epd_waveshare::color::Color> =
-    //         embedded_graphics::image::Image::new(rust_bytes, 144, 144);
-    //     let abema_img: Image1BPP<epd_waveshare::color::Color> =             embedded_graphics::image::Image::new(abema_bytes, 151, 151);
+    let rust_bytes = include_bytes!("../data/rust144x144.raw");
+    let abema_bytes = include_bytes!("../data/abema151x151.raw");
+    let rust_img: embedded_graphics::image::Image1BPP<epd_waveshare::color::Color> = embedded_graphics::image::Image::new(rust_bytes, 144, 144);
+    let abema_img: embedded_graphics::image::Image1BPP<epd_waveshare::color::Color> = embedded_graphics::image::Image::new(abema_bytes, 151, 151);
+
+    let mypayload = match matches.value_of("image"){
+        Some("rust") => PayloadData::Image(10,10,rust_img),
+        Some("abema") => PayloadData::Image(10,10,abema_img),
+        Some(_) => PayloadData::Internal,
+        None =>    PayloadData::Text(s)
+    };
+
+
+
 
     match display_payload(mypayload) {
         Ok(_) => println!("Operation ok"),
@@ -185,6 +205,9 @@ fn display_payload(payload: PayloadData) -> Result<(), NeoError> {
                 );
             }
         }),
+        PayloadData::Image(x,y,img) => {
+            display.draw(img.translate(Coord::new(x,y)).into_iter());
+        }
         _ => {}
     }
     epd.update_frame(&mut spi, &display.buffer())?;
