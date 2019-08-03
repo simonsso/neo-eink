@@ -100,7 +100,7 @@ fn display_payload(payload: PayloadData) -> Result<(), NeoError> {
 
     let mut delay = linux_embedded_hal::Delay;
 
-    let mut spi = Spidev::open("/dev/spidev0.0").unwrap();
+    let mut spi = Spidev::open("/dev/spidev0.0")?;
     let options = SpidevOptions::new()
         .bits_per_word(8)
         .max_speed_hz(1_000_000)
