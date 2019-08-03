@@ -1,11 +1,11 @@
 // the eink library
-extern crate epd_waveshare;
 extern crate clap;
+extern crate epd_waveshare;
 extern crate input_stream;
 
 use epd_waveshare::{
     epd1in54::{Buffer1in54, EPD1in54},
-    graphics::{Display},
+    graphics::Display,
     prelude::*,
 };
 
@@ -18,10 +18,10 @@ use embedded_graphics::fonts::Font6x8;
 use embedded_graphics::prelude::*;
 use embedded_graphics::Drawing;
 
-use linux_embedded_hal::Pin;
-use linux_embedded_hal::Spidev;
 use embedded_hal::digital::OutputPin;
 use input_stream::InputStream;
+use linux_embedded_hal::Pin;
+use linux_embedded_hal::Spidev;
 
 use std::error::Error;
 use sysfs_gpio::Direction;
@@ -37,60 +37,65 @@ pub enum NeoError {
 impl std::fmt::Display for NeoError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            NeoError::IoError(e) =>  write!(f,"{}", e.to_string()),
-            NeoError::Suberror(s) => write!(f,"{}",s),
-            _ => write!(f,"UnexpectedResponse"),
+            NeoError::IoError(e) => write!(f, "{}", e.to_string()),
+            NeoError::Suberror(s) => write!(f, "{}", s),
+            _ => write!(f, "UnexpectedResponse"),
         }
     }
 }
 
 impl<E> From<E> for NeoError
-where E:Error
+where
+    E: Error,
 {
-    fn from(e:E ) ->Self{
+    fn from(e: E) -> Self {
         NeoError::Suberror(e.to_string())
     }
 }
 
-pub enum PayloadData<'a>{
-    Text(InputStream<std::io::StdinLock<'a>>),   // TODO this type should be something more generic when I understund it more
-//    Image(u32,u32,embedded_graphics::image::Image),
-    Internal
+pub enum PayloadData<'a> {
+    Text(InputStream<std::io::StdinLock<'a>>), // TODO this type should be something more generic when I understund it more
+    //    Image(u32,u32,embedded_graphics::image::Image),
+    Internal,
 }
 
 fn main() -> std::io::Result<()> {
-
-    clap::App::new("neo_eink").version("0.1").about("Display items on waveshare connected on SPI").author("Fredrik SIMONSSON")
-                .arg(clap::Arg::with_name("v")
-                               .short("v")
-                               .multiple(true)
-                               .help("Sets the level of verbosity"))
-                .arg(clap::Arg::with_name("hal-mode"))
-                    .help("choose hal mode (RPI or NEO)")                 
-                .get_matches();
+    clap::App::new("neo_eink")
+        .version("0.1")
+        .about("Display items on waveshare connected on SPI")
+        .author("Fredrik SIMONSSON")
+        .arg(
+            clap::Arg::with_name("v")
+                .short("v")
+                .multiple(true)
+                .help("Sets the level of verbosity"),
+        )
+        .arg(clap::Arg::with_name("hal-mode"))
+        .help("choose hal mode (RPI or NEO)")
+        .get_matches();
     let stdinlock = std::io::stdin();
-    let s:InputStream<std::io::StdinLock> = InputStream::new(stdinlock.lock());
+    let s: InputStream<std::io::StdinLock> = InputStream::new(stdinlock.lock());
 
-    let mypayload = PayloadData::Text(s );
-                // This code is going here soon somehow
-                // sleep(Duration::from_millis(5_000));
-                //     let rust_bytes = include_bytes!("../data/rust144x144.raw");
-                //     let abema_bytes = include_bytes!("../data/abema151x151.raw");
+    let mypayload = PayloadData::Text(s);
+    // This code is going here soon somehow
+    // sleep(Duration::from_millis(5_000));
+    //     let rust_bytes = include_bytes!("../data/rust144x144.raw");
+    //     let abema_bytes = include_bytes!("../data/abema151x151.raw");
 
-                //     let rust_img: Image1BPP<epd_waveshare::color::Color> =
-                //         embedded_graphics::image::Image::new(rust_bytes, 144, 144);
-                //     let abema_img: Image1BPP<epd_waveshare::color::Color> =             embedded_graphics::image::Image::new(abema_bytes, 151, 151);
-
-
+    //     let rust_img: Image1BPP<epd_waveshare::color::Color> =
+    //         embedded_graphics::image::Image::new(rust_bytes, 144, 144);
+    //     let abema_img: Image1BPP<epd_waveshare::color::Color> =             embedded_graphics::image::Image::new(abema_bytes, 151, 151);
 
     match display_payload(mypayload) {
-        Ok(_) =>  {println!("Operation ok")},
-        Err(e) => {println!("Something failed {}",e);}
+        Ok(_) => println!("Operation ok"),
+        Err(e) => {
+            println!("Something failed {}", e);
+        }
     }
     Ok(())
 }
 
-fn  display_payload(payload:PayloadData) -> Result<(),NeoError> {
+fn display_payload(payload: PayloadData) -> Result<(), NeoError> {
     // let mut delay = Delay::new(syst,clocks);
 
     let mut delay = linux_embedded_hal::Delay;
@@ -112,7 +117,6 @@ fn  display_payload(payload:PayloadData) -> Result<(),NeoError> {
     // P0.25   CS          orange       67
     // P0.24   clk         yellow
     // P0.23   Din (MOSI)  blue
- 
 
     // Rpi bindings from https://www.waveshare.com/w/upload/a/a2/1.8inch_LCD_Module_User_Manual_EN.pdf
 
@@ -126,17 +130,22 @@ fn  display_payload(payload:PayloadData) -> Result<(),NeoError> {
     //      RST             GPIO.2(PIN13)       27
     //      BL              GPIO.5 (PIN18)      24
 
-    struct PinMappings{
-        cs:u64,
-        rst:u64,
-        busy:u64,
-        dc:u64,
+    struct PinMappings {
+        cs: u64,
+        rst: u64,
+        busy: u64,
+        dc: u64,
     }
 
-  // expected   const  NEOMAPPING: PinMappings =  PinMappings{cs:67, rst:1, busy:2, dc:0 };
-    const  RPI3MAPPING: PinMappings = PinMappings{cs:8, rst:27, busy:24, dc:25 }; 
+    // expected   const  NEOMAPPING: PinMappings =  PinMappings{cs:67, rst:1, busy:2, dc:0 };
+    const RPI3MAPPING: PinMappings = PinMappings {
+        cs: 8,
+        rst: 27,
+        busy: 24,
+        dc: 25,
+    };
 
-    let mapping=RPI3MAPPING;
+    let mapping = RPI3MAPPING;
 
     println!("Export Pins");
 
@@ -163,26 +172,23 @@ fn  display_payload(payload:PayloadData) -> Result<(),NeoError> {
 
     display.clear_buffer(Color::White);
     // Draw some text
-    match payload{
-        PayloadData::Text(stream) => {
-            stream.lines().enumerate().for_each(|(pos,message)|{
-                    let pos = pos as i32;
-                    if let Ok(message) = message {
-                        display.draw(
-                        Font6x8::render_str(&message)
-                            .with_stroke(Some(Color::Black))
-                            .with_fill(Some(Color::White))
-                            .translate(Coord::new(5, 5+pos*9))
-                            .into_iter(),
-                        );
-                    }
-            })
-        },
-        _=> { },
+    match payload {
+        PayloadData::Text(stream) => stream.lines().enumerate().for_each(|(pos, message)| {
+            let pos = pos as i32;
+            if let Ok(message) = message {
+                display.draw(
+                    Font6x8::render_str(&message)
+                        .with_stroke(Some(Color::Black))
+                        .with_fill(Some(Color::White))
+                        .translate(Coord::new(5, 5 + pos * 9))
+                        .into_iter(),
+                );
+            }
+        }),
+        _ => {}
     }
     epd.update_frame(&mut spi, &display.buffer())?;
     epd.display_frame(&mut spi)?;
-    
+
     Ok(())
-    
 }
