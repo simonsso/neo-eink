@@ -23,13 +23,30 @@ use linux_embedded_hal::Spidev;
 use embedded_hal::digital::OutputPin;
 use input_stream::InputStream;
 
+use std::error::Error;
 use sysfs_gpio::Direction;
 
 use linux_embedded_hal::spidev::{SpidevOptions, SPI_MODE_0};
 
-pub enum Error {
+pub enum NeoError {
     UnexpectedResponse,
+    IoError(std::io::Error),
 }
+
+impl From<std::io::Error> for NeoError{
+    fn from(e: std::io::Error) -> Self{
+        NeoError::IoError(e)
+    }
+}
+
+//   Solve:: the trait `std::convert::From<sysfs_gpio::error::Error>` is not implemented for `Error`
+
+// impl From<Error> for NeoError
+// {
+//     fn from(_e:Error ) ->Self{
+//         NeoError::UnexpectedResponse
+//     }
+// }
 
 pub enum PayloadData<'a>{
     Text(InputStream<std::io::StdinLock<'a>>),   // TODO this type should be something more generic when I understund it more
@@ -69,7 +86,7 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn  display_payload(payload:PayloadData) -> Result<(),Error> {
+fn  display_payload(payload:PayloadData) -> Result<(),NeoError> {
     // let mut delay = Delay::new(syst,clocks);
 
     let mut delay = linux_embedded_hal::Delay;
@@ -80,10 +97,7 @@ fn  display_payload(payload:PayloadData) -> Result<(),Error> {
         .max_speed_hz(1_000_000)
         .mode(SPI_MODE_0)
         .build();
-    match spi.configure(&options) {
-        Ok(_) =>  {println!("Configure ok")},
-        Err(x) => {println!("Configure failed {}",x);}
-    }
+    spi.configure(&options)?;
 
     // Pin Mappings for NEONano
     // Pin     Connecton   Colour       LXnum
@@ -123,14 +137,11 @@ fn  display_payload(payload:PayloadData) -> Result<(),Error> {
     println!("Export Pins");
 
     let cs = Pin::new(mapping.cs);
-    cs.export().map_err(|_|{Error::UnexpectedResponse})?;
-    cs.set_direction(Direction::Low).map_err(|_|{Error::UnexpectedResponse})?;
+    cs.export().map_err(|_|{NeoError::UnexpectedResponse})?;
+    cs.set_direction(Direction::Low).map_err(|_|{NeoError::UnexpectedResponse})?;
     let mut rst = Pin::new(mapping.rst);
-    match rst.export() {
-        Ok(_) =>  {println!("Rst ok")},
-        Err(x) => {println!("Rst Export Failed {}",x);}
-    }
-    rst.set_direction(Direction::Low).map_err(|_|{Error::UnexpectedResponse})?;
+    rst.export().map_err(|_|{NeoError::UnexpectedResponse})?;
+    rst.set_direction(Direction::Low).map_err(|_|{NeoError::UnexpectedResponse})?;
     rst.set_low();
     rst.set_high();
     let busy = Pin::new(mapping.busy);
@@ -139,12 +150,12 @@ fn  display_payload(payload:PayloadData) -> Result<(),Error> {
         Ok(_) =>  {println!("Busy ok")},
         Err(x) => {println!("Busy Export Failed {}",x);}
     }
-    busy.set_direction(Direction::Low).map_err(|_|{Error::UnexpectedResponse})?;
+    busy.set_direction(Direction::Low).map_err(|_|{NeoError::UnexpectedResponse})?;
     let dc = Pin::new(mapping.dc);
-    dc.export().map_err(|_|{Error::UnexpectedResponse})?;;
-    dc.set_direction(Direction::Low).map_err(|_|{Error::UnexpectedResponse})?;
+    dc.export().map_err(|_|{NeoError::UnexpectedResponse})?;;
+    dc.set_direction(Direction::Low).map_err(|_|{NeoError::UnexpectedResponse})?;
 
-    let mut epd = EPD1in54::new(&mut spi, cs, busy, dc, rst, &mut delay).map_err(|_|{Error::UnexpectedResponse})?;
+    let mut epd = EPD1in54::new(&mut spi, cs, busy, dc, rst, &mut delay).map_err(|_|{NeoError::UnexpectedResponse})?;
     println!("PD1in54::new: OK");
     // Setup the graphics
     let mut buffer = Buffer1in54::default();
@@ -169,8 +180,8 @@ fn  display_payload(payload:PayloadData) -> Result<(),Error> {
         },
         _=> { },
     }
-    epd.update_frame(&mut spi, &display.buffer()).map_err(|_|{Error::UnexpectedResponse})?;
-    epd.display_frame(&mut spi).map_err(|_|{Error::UnexpectedResponse})?;
+    epd.update_frame(&mut spi, &display.buffer()).map_err(|_|{NeoError::UnexpectedResponse})?;
+    epd.display_frame(&mut spi).map_err(|_|{NeoError::UnexpectedResponse})?;
     
     Ok(())
     
