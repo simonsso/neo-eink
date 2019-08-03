@@ -31,22 +31,24 @@ use linux_embedded_hal::spidev::{SpidevOptions, SPI_MODE_0};
 pub enum NeoError {
     UnexpectedResponse,
     IoError(std::io::Error),
-    Err(String),
+    Suberror(String),
 }
 
-// impl From<std::io::Error> for NeoError{
-//     fn from(e: std::io::Error) -> Self{
-//         NeoError::IoError(e)
-//     }
-// }
-
-//   Solve:: the trait `std::convert::From<sysfs_gpio::error::Error>` is not implemented for `Error`
+impl std::fmt::Display for NeoError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NeoError::IoError(e) =>  write!(f,"{}", e.to_string()),
+            NeoError::Suberror(s) => write!(f,"{}",s),
+            _ => write!(f,"UnexpectedResponse"),
+        }
+    }
+}
 
 impl<E> From<E> for NeoError
 where E:Error
 {
     fn from(e:E ) ->Self{
-        NeoError::Err(e.to_string())
+        NeoError::Suberror(e.to_string())
     }
 }
 
@@ -83,7 +85,7 @@ fn main() -> std::io::Result<()> {
 
     match display_payload(mypayload) {
         Ok(_) =>  {println!("Operation ok")},
-        Err(_e) => {println!("Something failed");}
+        Err(e) => {println!("Something failed {}",e);}
     }
     Ok(())
 }
