@@ -55,7 +55,11 @@ where
 
 pub enum PayloadData<'a> {
     Text(InputStream<std::io::StdinLock<'a>>), // TODO this type should be something more generic when I understund it more
-    Image(i32,i32,embedded_graphics::image::Image1BPP<'a,epd_waveshare::color::Color>),
+    Image(
+        i32,
+        i32,
+        embedded_graphics::image::Image1BPP<'a, epd_waveshare::color::Color>,
+    ),
     Internal,
 }
 
@@ -74,35 +78,36 @@ fn main() -> std::io::Result<()> {
             clap::Arg::with_name("hal-mode")
                 .long("hal-mode")
                 .takes_value(true)
-                .help("choose hal mode (RPI or NEO)")
+                .help("choose hal mode (RPI or NEO)"),
         )
         .arg(
             clap::Arg::with_name("image")
                 .long("image")
                 .takes_value(true)
-                .help("image name, rust or ameba")
+                .help("image name, rust or ameba"),
         )
         .get_matches();
     let stdinlock = std::io::stdin();
     let s: InputStream<std::io::StdinLock> = InputStream::new(stdinlock.lock());
 
-    match matches.value_of("hal-mode"){
-        Some("neo") => { println!("Neo mode not implemented yet")}
-        _ => {println!("default mode Rpi")}
+    match matches.value_of("hal-mode") {
+        Some("neo") => println!("Neo mode not implemented yet"),
+        _ => println!("default mode Rpi"),
     };
 
     let rust_bytes = include_bytes!("../data/rust144x144.raw");
     let abema_bytes = include_bytes!("../data/abema151x151.raw");
-    let rust_img: embedded_graphics::image::Image1BPP<epd_waveshare::color::Color> = embedded_graphics::image::Image::new(rust_bytes, 144, 144);
-    let abema_img: embedded_graphics::image::Image1BPP<epd_waveshare::color::Color> = embedded_graphics::image::Image::new(abema_bytes, 151, 151);
+    let rust_img: embedded_graphics::image::Image1BPP<epd_waveshare::color::Color> =
+        embedded_graphics::image::Image::new(rust_bytes, 144, 144);
+    let abema_img: embedded_graphics::image::Image1BPP<epd_waveshare::color::Color> =
+        embedded_graphics::image::Image::new(abema_bytes, 151, 151);
 
-    let mypayload = match matches.value_of("image"){
-        Some("rust") => PayloadData::Image(28,28,rust_img),
-        Some("abema") => PayloadData::Image(24,24,abema_img),
+    let mypayload = match matches.value_of("image") {
+        Some("rust") => PayloadData::Image(28, 28, rust_img),
+        Some("abema") => PayloadData::Image(24, 24, abema_img),
         Some(_) => PayloadData::Internal,
-        None =>    PayloadData::Text(s)
+        None => PayloadData::Text(s),
     };
-
 
     match display_payload(mypayload) {
         Ok(_) => println!("Operation ok"),
@@ -155,15 +160,21 @@ fn display_payload(payload: PayloadData) -> Result<(), NeoError> {
         dc: u64,
     }
 
-    // expected   const  NEOMAPPING: PinMappings =  PinMappings{cs:67, rst:1, busy:2, dc:0 };
-    const RPI3MAPPING: PinMappings = PinMappings {
-        cs: 8,
-        rst: 27,
-        busy: 24,
-        dc: 25,
+    // expected
+    const NEOMAPPING: PinMappings = PinMappings {
+        cs: 67,
+        rst: 1,
+        busy: 2,
+        dc: 0,
     };
+    // const RPI3MAPPING: PinMappings = PinMappings {
+    //     cs: 8,
+    //     rst: 27,
+    //     busy: 24,
+    //     dc: 25,
+    // };
 
-    let mapping = RPI3MAPPING;
+    let mapping = NEOMAPPING;
 
     let cs = Pin::new(mapping.cs);
     cs.export()?;
@@ -201,8 +212,8 @@ fn display_payload(payload: PayloadData) -> Result<(), NeoError> {
                 );
             }
         }),
-        PayloadData::Image(x,y,img) => {
-            display.draw(img.translate(Coord::new(x,y)).into_iter());
+        PayloadData::Image(x, y, img) => {
+            display.draw(img.translate(Coord::new(x, y)).into_iter());
         }
         _ => {}
     }
