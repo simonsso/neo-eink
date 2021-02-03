@@ -14,6 +14,7 @@ use std::io::BufRead;
 // Graphics
 extern crate embedded_graphics;
 use embedded_graphics::coord::Coord;
+use embedded_graphics::fonts::Font12x16;
 use embedded_graphics::fonts::Font6x8;
 use embedded_graphics::prelude::*;
 use embedded_graphics::Drawing;
@@ -54,12 +55,14 @@ where
 }
 
 pub enum PayloadData<'a> {
-    Text(InputStream<std::io::StdinLock<'a>>), // TODO this type should be something more generic when I understund it more
+    Text(InputStream<std::io::StdinLock<'a>>), // TODO this type should be something more generic when I understand it more
     Image(
         i32,
         i32,
         embedded_graphics::image::Image1BPP<'a, epd_waveshare::color::Color>,
     ),
+    Date,
+    Checker,
     Internal,
 }
 
@@ -74,12 +77,12 @@ fn main() -> std::io::Result<()> {
                 .multiple(true)
                 .help("Sets the level of verbosity"),
         )
-        .arg(
-            clap::Arg::with_name("hal-mode")
-                .long("hal-mode")
-                .takes_value(true)
-                .help("choose hal mode (RPI or NEO)"),
-        )
+        // .arg(
+        //     clap::Arg::with_name("hal-mode")
+        //         .long("hal-mode")
+        //         .takes_value(true)
+        //         .help("choose hal mode (RPI or NEO)"),
+        // )
         .arg(
             clap::Arg::with_name("image")
                 .long("image")
@@ -90,10 +93,10 @@ fn main() -> std::io::Result<()> {
     let stdinlock = std::io::stdin();
     let s: InputStream<std::io::StdinLock> = InputStream::new(stdinlock.lock());
 
-    match matches.value_of("hal-mode") {
-        Some("neo") => println!("Neo mode not implemented yet"),
-        _ => println!("default mode Rpi"),
-    };
+    // match matches.value_of("hal-mode") {
+    //     Some("neo") => println!("Neo mode not implemented yet"),
+    //     _ => println!("default mode Rpi"),
+    // };
 
     let rust_bytes = include_bytes!("../data/rust144x144.raw");
     let abema_bytes = include_bytes!("../data/abema151x151.raw");
@@ -105,6 +108,8 @@ fn main() -> std::io::Result<()> {
     let mypayload = match matches.value_of("image") {
         Some("rust") => PayloadData::Image(28, 28, rust_img),
         Some("abema") => PayloadData::Image(24, 24, abema_img),
+        Some("date") => PayloadData::Date,
+        Some("checker") => PayloadData::Checker,
         Some(_) => PayloadData::Internal,
         None => PayloadData::Text(s),
     };
@@ -132,7 +137,7 @@ fn display_payload(payload: PayloadData) -> Result<(), NeoError> {
     spi.configure(&options)?;
 
     // Pin Mappings for NEONano
-    // Pin     Connecton   Colour       LXnum
+    // Pin     Connecton   Colour       LXnum   CN1
     // P0.27   busy        purple       2
     // P0.26   Rst         white        1
     // P0.02   DC          Green        0
@@ -140,6 +145,7 @@ fn display_payload(payload: PayloadData) -> Result<(), NeoError> {
     // P0.25   CS          orange       67
     // P0.24   clk         yellow
     // P0.23   Din (MOSI)  blue
+    //         3.3         red
 
     // Rpi bindings from https://www.waveshare.com/w/upload/a/a2/1.8inch_LCD_Module_User_Manual_EN.pdf
 
@@ -214,6 +220,32 @@ fn display_payload(payload: PayloadData) -> Result<(), NeoError> {
         }),
         PayloadData::Image(x, y, img) => {
             display.draw(img.translate(Coord::new(x, y)).into_iter());
+        }
+        PayloadData::Date => display.draw(
+            Font12x16::render_str("月曜日 12:30")
+                .with_stroke(Some(Color::Black))
+                .with_fill(Some(Color::White))
+                .translate(Coord::new(3, 3))
+                .into_iter(),
+        ),
+        PayloadData::Checker => {
+            let w = epd.width();
+            let h = epd.height();
+            // let w = 256;
+            // let h = 256;
+            let checker: Vec<u8> = (0u32..(w * h))
+                // .map(|x| ((x % 4) / 2 ^ ((x / 4) % 2)) as u8)
+                .map(|i| {
+                    let x = i % h;
+                    let y = i / h;
+                    let p = x ^ y;
+                    (p as u8 & 1) * 255
+                })
+                .collect();
+            let img: embedded_graphics::image::Image1BPP<epd_waveshare::color::Color> =
+                embedded_graphics::image::Image1BPP::new(&checker, w, h);
+
+            display.draw(img.translate(Coord::new(0, 0)).into_iter());
         }
         _ => {}
     }
