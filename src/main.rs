@@ -1,33 +1,26 @@
-// the eink library
-extern crate clap;
-extern crate epd_waveshare;
-extern crate input_stream;
-
 use epd_waveshare::{
-    epd1in54::{Buffer1in54, EPD1in54},
-    graphics::Display,
+    epd1in54::{Display1in54, Epd1in54},
     prelude::*,
 };
 
 use std::io::BufRead;
 
 // Graphics
-extern crate embedded_graphics;
-use embedded_graphics::coord::Coord;
-use embedded_graphics::fonts::Font12x16;
-use embedded_graphics::fonts::Font6x8;
 use embedded_graphics::prelude::*;
-use embedded_graphics::Drawing;
+use embedded_graphics::{mono_font::MonoTextStyleBuilder, text::TextStyleBuilder};
 
 use embedded_hal::digital::OutputPin;
 use input_stream::InputStream;
-use linux_embedded_hal::Pin;
-use linux_embedded_hal::Spidev;
+// use linux_embedded_hal::SysfsPin::Pin;
+// use linux_embedded_hal::Spidev;
 
 use std::error::Error;
 use sysfs_gpio::Direction;
 
-use linux_embedded_hal::spidev::{SpidevOptions, SPI_MODE_0};
+use linux_embedded_hal::{
+    spidev::{SpiModeFlags, Spidev, SpidevOptions},
+    Delay, SpidevDevice, SysfsPin,
+};
 
 pub enum NeoError {
     UnexpectedResponse,
@@ -56,40 +49,40 @@ where
 
 pub enum PayloadData<'a> {
     Text(InputStream<std::io::StdinLock<'a>>), // TODO this type should be something more generic when I understand it more
-    Image(
-        i32,
-        i32,
-        embedded_graphics::image::Image1BPP<'a, epd_waveshare::color::Color>,
-    ),
+    // Image(
+    //     i32,
+    //     i32,
+    //     embedded_graphics::image::Image1BPP<'a, epd_waveshare::color::Color>,
+    // ),
     Date,
     Checker,
     Internal,
 }
 
 fn main() -> std::io::Result<()> {
-    let matches = clap::App::new("neo_eink")
-        .version("0.1")
-        .about("Display items on waveshare connected on SPI")
-        .author("Fredrik SIMONSSON")
-        .arg(
-            clap::Arg::with_name("v")
-                .short("v")
-                .multiple(true)
-                .help("Sets the level of verbosity"),
-        )
-        // .arg(
-        //     clap::Arg::with_name("hal-mode")
-        //         .long("hal-mode")
-        //         .takes_value(true)
-        //         .help("choose hal mode (RPI or NEO)"),
-        // )
-        .arg(
-            clap::Arg::with_name("image")
-                .long("image")
-                .takes_value(true)
-                .help("image name, rust or ameba"),
-        )
-        .get_matches();
+    // let matches = clap::App::new("neo_eink")
+    //     .version("0.1")
+    //     .about("Display items on waveshare connected on SPI")
+    //     .author("Fredrik SIMONSSON")
+    //     .arg(
+    //         clap::Arg::with_name("v")
+    //             .short("v")
+    //             .multiple(true)
+    //             .help("Sets the level of verbosity"),
+    //     )
+    //     // .arg(
+    //     //     clap::Arg::with_name("hal-mode")
+    //     //         .long("hal-mode")
+    //     //         .takes_value(true)
+    //     //         .help("choose hal mode (RPI or NEO)"),
+    //     // )
+    //     .arg(
+    //         clap::Arg::with_name("image")
+    //             .long("image")
+    //             .takes_value(true)
+    //             .help("image name, rust or ameba"),
+    //     )
+    //     .get_matches();
     let stdinlock = std::io::stdin();
     let s: InputStream<std::io::StdinLock> = InputStream::new(stdinlock.lock());
 
@@ -98,21 +91,22 @@ fn main() -> std::io::Result<()> {
     //     _ => println!("default mode Rpi"),
     // };
 
-    let rust_bytes = include_bytes!("../data/rust144x144.raw");
-    let abema_bytes = include_bytes!("../data/abema151x151.raw");
-    let rust_img: embedded_graphics::image::Image1BPP<epd_waveshare::color::Color> =
-        embedded_graphics::image::Image::new(rust_bytes, 144, 144);
-    let abema_img: embedded_graphics::image::Image1BPP<epd_waveshare::color::Color> =
-        embedded_graphics::image::Image::new(abema_bytes, 151, 151);
+    // let rust_bytes = include_bytes!("../data/rust144x144.raw");
+    // let abema_bytes = include_bytes!("../data/abema151x151.raw");
+    // let rust_img: embedded_graphics::image::Image1BPP<epd_waveshare::color::Color> =
+    //     embedded_graphics::image::Image::new(rust_bytes, 144, 144);
+    // let abema_img: embedded_graphics::image::Image1BPP<epd_waveshare::color::Color> =
+    //     embedded_graphics::image::Image::new(abema_bytes, 151, 151);
 
-    let mypayload = match matches.value_of("image") {
-        Some("rust") => PayloadData::Image(28, 28, rust_img),
-        Some("abema") => PayloadData::Image(24, 24, abema_img),
-        Some("date") => PayloadData::Date,
-        Some("checker") => PayloadData::Checker,
-        Some(_) => PayloadData::Internal,
-        None => PayloadData::Text(s),
-    };
+    // let mypayload = match matches.value_of("image") {
+    //     Some("rust") => PayloadData::Image(28, 28, rust_img),
+    //     Some("abema") => PayloadData::Image(24, 24, abema_img),
+    //     Some("date") => PayloadData::Date,
+    //     Some("checker") => PayloadData::Checker,
+    //     Some(_) => PayloadData::Internal,
+    //     None => PayloadData::Text(s),
+    // };
+    let mypayload = PayloadData::Text(s);
 
     match display_payload(mypayload) {
         Ok(_) => println!("Operation ok"),
@@ -128,13 +122,14 @@ fn display_payload(payload: PayloadData) -> Result<(), NeoError> {
 
     let mut delay = linux_embedded_hal::Delay;
 
-    let mut spi = Spidev::open("/dev/spidev0.0")?;
-    let options = SpidevOptions::new()
-        .bits_per_word(8)
-        .max_speed_hz(1_000_000)
-        .mode(SPI_MODE_0)
-        .build();
-    spi.configure(&options)?;
+    let mut spi = SpidevDevice::open("/dev/spidev0.0")?;
+    spi.configure(
+        &SpidevOptions::new()
+            .bits_per_word(8)
+            .max_speed_hz(1_000_000)
+            .mode(SpiModeFlags::SPI_MODE_0)
+            .build(),
+    )?;
 
     // Pin Mappings for NEONano
     // Pin     Connecton   Colour       LXnum   CN1
@@ -182,75 +177,88 @@ fn display_payload(payload: PayloadData) -> Result<(), NeoError> {
 
     let mapping = NEOMAPPING;
 
-    let cs = Pin::new(mapping.cs);
+    let cs = SysfsPin::new(mapping.cs);
     cs.export()?;
     cs.set_direction(Direction::Low)?;
-    let mut rst = Pin::new(mapping.rst);
+    let mut rst = SysfsPin::new(mapping.rst);
     rst.export()?;
     rst.set_direction(Direction::Low)?;
-    rst.set_low();
-    rst.set_high();
-    let busy = Pin::new(mapping.busy);
+    let _ = rst.set_low();
+    let _ = rst.set_high();
+    let busy = SysfsPin::new(mapping.busy);
     busy.export()?;
     busy.set_direction(Direction::Low)?;
-    let dc = Pin::new(mapping.dc);
+    let dc = SysfsPin::new(mapping.dc);
     dc.export()?;
     dc.set_direction(Direction::Low)?;
 
-    let mut epd = EPD1in54::new(&mut spi, cs, busy, dc, rst, &mut delay)?;
+    // sic TODO handle Error here
+    let mut epd = Epd1in54::new(&mut spi, busy, dc, rst, &mut delay, None).unwrap();
     println!("PD1in54::new: OK");
     // Setup the graphics
-    let mut buffer = Buffer1in54::default();
-    let mut display = Display::new(epd.width(), epd.height(), &mut buffer.buffer);
+    let mut display = Display1in54::default();
 
-    display.clear_buffer(Color::White);
+    display.clear(Color::White);
     // Draw some text
     match payload {
         PayloadData::Text(stream) => stream.lines().enumerate().for_each(|(pos, message)| {
             let pos = pos as i32;
             if let Ok(message) = message {
-                display.draw(
-                    Font6x8::render_str(&message)
-                        .with_stroke(Some(Color::Black))
-                        .with_fill(Some(Color::White))
-                        .translate(Coord::new(5, 5 + pos * 9))
-                        .into_iter(),
-                );
+                let text_style = TextStyleBuilder::new()
+                    .baseline(embedded_graphics::text::Baseline::Top)
+                    .build();
+                let style = MonoTextStyleBuilder::new()
+                    .font(&embedded_graphics::mono_font::ascii::FONT_10X20)
+                    .text_color(Color::White)
+                    .background_color(Color::Black)
+                    .build();
+
+                let _ = embedded_graphics::text::Text::with_text_style(
+                    &message,
+                    Point::new(90, 40),
+                    style,
+                    text_style,
+                )
+                .draw(&mut display);
             }
         }),
-        PayloadData::Image(x, y, img) => {
-            display.draw(img.translate(Coord::new(x, y)).into_iter());
+        // PayloadData::Image(x, y, img) => {
+        //     // display.draw(img.translate(Coord::new(x, y)).into_iter());
+        // }
+        PayloadData::Date => {
+            // display.draw(
+            //     Font12x16::render_str("月曜日 12:30")
+            //         .with_stroke(Some(Color::Black))
+            //         .with_fill(Some(Color::White))
+            //         .translate(Coord::new(3, 3))
+            //         .into_iter(),
+            // ),
         }
-        PayloadData::Date => display.draw(
-            Font12x16::render_str("月曜日 12:30")
-                .with_stroke(Some(Color::Black))
-                .with_fill(Some(Color::White))
-                .translate(Coord::new(3, 3))
-                .into_iter(),
-        ),
         PayloadData::Checker => {
-            let w = epd.width();
-            let h = epd.height();
-            // let w = 256;
-            // let h = 256;
-            let checker: Vec<u8> = (0u32..(w * h))
-                // .map(|x| ((x % 4) / 2 ^ ((x / 4) % 2)) as u8)
-                .map(|i| {
-                    let x = i % h;
-                    let y = i / h;
-                    let p = x ^ y;
-                    (p as u8 & 1) * 255
-                })
-                .collect();
-            let img: embedded_graphics::image::Image1BPP<epd_waveshare::color::Color> =
-                embedded_graphics::image::Image1BPP::new(&checker, w, h);
+            // let w = epd.width();
+            // let h = epd.height();
+            // // let w = 256;
+            // // let h = 256;
+            // let checker: Vec<u8> = (0u32..(w * h))
+            //     // .map(|x| ((x % 4) / 2 ^ ((x / 4) % 2)) as u8)
+            //     .map(|i| {
+            //         let x = i % h;
+            //         let y = i / h;
+            //         let p = x ^ y;
+            //         (p as u8 & 1) * 255
+            //     })
+            //     .collect();
+            // let img: embedded_graphics::image::Image1BPP<epd_waveshare::color::Color> =
+            //     embedded_graphics::image::Image1BPP::new(&checker, w, h);
 
-            display.draw(img.translate(Coord::new(0, 0)).into_iter());
+            // display.draw(img.translate(Coord::new(0, 0)).into_iter());
         }
         _ => {}
     }
-    epd.update_frame(&mut spi, &display.buffer())?;
-    epd.display_frame(&mut spi)?;
+    let mut delay = Delay {};
+
+    epd.update_frame(&mut spi, &display.buffer(), &mut delay)?;
+    epd.display_frame(&mut spi, &mut delay)?;
 
     Ok(())
 }
